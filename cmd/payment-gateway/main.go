@@ -77,18 +77,23 @@ func main() {
 	cardToken, err := cieloApi.TokenizeCreditCard("Gabriel Teste", card)
 
 	if err == nil {
-		fmt.Printf("Card token: %s\n", cardToken)
+		fmt.Println(cardToken)
 	} else {
 		fmt.Println(err.Error())
 	}
 
 	fmt.Println()
 
-	orderId := uuid.New().String()
-
 	fmt.Println("ProcessCreditCardPayment")
 
-	paymentId, err := cieloApi.ProcessCreditCardPayment(orderId, 1569, 1, "LOJATESTE", card)
+	payment := cielo.CreditCardPayment{
+		OrderId:        uuid.New().String(),
+		Amount:         1569,
+		Installments:   1,
+		SoftDescriptor: "LOJATESTE",
+	}
+
+	paymentId, err := cieloApi.ProcessCreditCardPayment(payment, card)
 
 	if err != nil {
 		fmt.Println(err)

@@ -8,6 +8,7 @@ import (
 	"github.com/valyala/fastjson"
 	"io"
 	"net/http"
+	"regexp"
 	"time"
 )
 
@@ -25,6 +26,13 @@ type CreditCard struct {
 	ExpirationMonth int
 	ExpirationYear  int
 	SecurityCode    string
+}
+
+type CreditCardPayment struct {
+	OrderId        string
+	Amount         int
+	Installments   int
+	SoftDescriptor string
 }
 
 type httpRetryTransport struct{}
@@ -71,17 +79,28 @@ func NewCieloApi(merchantID string, merchantKey string, commandBaseUrl string, q
 	}
 }
 
-func (cieloApi *CieloApi) ProcessCreditCardPayment(orderId string, amount int, installments int, softDescriptor string, card CreditCard) (string, error) {
+func (cieloApi *CieloApi) ProcessCreditCardPayment(payment CreditCardPayment, card CreditCard) (string, error) {
+	err := validateCreditCardFields(card)
+
+	if err != nil {
+		return "", err
+	}
+
+	// TODO Check CreditCardPayment
+	// TODO Accept a tokenized card
+	// TODO Accept recurrent payment
+	// https://docs.cielo.com.br/ecommerce-cielo/reference/criar-pagamento-credito
+
 	payload, err := json.Marshal(map[string]interface{}{
-		"MerchantOrderId": orderId,
+		"MerchantOrderId": payment.OrderId,
 		"Payment": map[string]interface{}{
 			"Type":           "CreditCard",
-			"Amount":         amount,
+			"Amount":         payment.Amount,
 			"Currency":       "BRL",
 			"Country":        "BRA",
-			"Installments":   installments,
+			"Installments":   payment.Installments,
 			"Capture":        true,
-			"SoftDescriptor": softDescriptor,
+			"SoftDescriptor": payment.SoftDescriptor,
 			"CreditCard": map[string]interface{}{
 				"CardNumber":     card.CardNumber,
 				"Holder":         card.Holder,
@@ -138,6 +157,12 @@ func (cieloApi *CieloApi) ProcessCreditCardPayment(orderId string, amount int, i
 }
 
 func (cieloApi *CieloApi) ValidateCreditCard(card CreditCard) error {
+	err := validateCreditCardFields(card)
+
+	if err != nil {
+		return err
+	}
+
 	payload, err := json.Marshal(map[string]interface{}{
 		"CardType":       "CreditCard",
 		"CardNumber":     card.CardNumber,
@@ -245,6 +270,12 @@ func (cieloApi *CieloApi) DetectCreditCardBrand(cardNumber string) (string, erro
 }
 
 func (cieloApi *CieloApi) TokenizeCreditCard(customerName string, card CreditCard) (string, error) {
+	err := validateCreditCardFields(card)
+
+	if err != nil {
+		return "", err
+	}
+
 	payload, err := json.Marshal(map[string]interface{}{
 		"CustomerName":   customerName,
 		"CardNumber":     card.CardNumber,
@@ -297,4 +328,32 @@ func (cieloApi *CieloApi) TokenizeCreditCard(customerName string, card CreditCar
 	}
 
 	return string(cardToken), nil
+}
+
+func validateCreditCardFields(card CreditCard) error {
+	if len(card.CardNumber) > 16 {
+		return errors.New("card number cannot exceed 16 characters")
+	}
+
+	if matched, _ := regexp.MatchString(`^\d+$`, card.CardNumber); !matched {
+		return errors.New("card number must contain only digits")
+	}
+
+	if len(card.Holder) > 25 {
+		return errors.New("holder name cannot exceed 25 characters")
+	}
+
+	if card.ExpirationMonth < 1 || card.ExpirationMonth > 12 {
+		return errors.New("expiration month must be between 1 and 12")
+	}
+
+	if card.ExpirationYear < time.Now().Year() {
+		return errors.New("expiration year must be the current year or later")
+	}
+
+	if matched, _ := regexp.MatchString(`^\d+$`, card.SecurityCode); !matched {
+		return errors.New("security code must contain only digits")
+	}
+
+	return nil
 }
