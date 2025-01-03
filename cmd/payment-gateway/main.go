@@ -35,21 +35,64 @@ func main() {
 		viper.GetString("cielo.merchantId"),
 		viper.GetString("cielo.merchantKey"),
 		viper.GetString("cielo.baseApiUrl"),
-		viper.GetString("cielo.baseQueryApiUrl"))
+		viper.GetString("cielo.baseQueryApiUrl"),
+	)
 
-	orderId := uuid.New().String()
+	cardNumber := "5024007153463100"
 
-	paymentId, err := cieloApi.ProcessCreditCardPayment(orderId, 1569, 1, "LOJATESTE", cielo.CreditCard{
-		CardNumber:      "1234123412341231",
+	fmt.Println("DetectCreditCardBrand")
+
+	cardBrand, err := cieloApi.DetectCreditCardBrand(cardNumber)
+
+	if err != nil {
+		fmt.Println(err)
+	} else {
+		fmt.Println(cardBrand)
+	}
+
+	fmt.Println()
+
+	card := cielo.CreditCard{
+		CardNumber:      cardNumber,
 		Holder:          "Teste\"Holder",
 		ExpirationMonth: 2,
 		ExpirationYear:  2030,
 		SecurityCode:    "123",
-	})
+	}
+
+	fmt.Println("ValidateCreditCard")
+
+	err = cieloApi.ValidateCreditCard(card)
+
+	if err == nil {
+		fmt.Println("Card is valid")
+	} else {
+		fmt.Println(err.Error())
+	}
+
+	fmt.Println()
+
+	fmt.Println("TokenizeCreditCard")
+
+	cardToken, err := cieloApi.TokenizeCreditCard("Gabriel Teste", card)
+
+	if err == nil {
+		fmt.Printf("Card token: %s\n", cardToken)
+	} else {
+		fmt.Println(err.Error())
+	}
+
+	fmt.Println()
+
+	orderId := uuid.New().String()
+
+	fmt.Println("ProcessCreditCardPayment")
+
+	paymentId, err := cieloApi.ProcessCreditCardPayment(orderId, 1569, 1, "LOJATESTE", card)
 
 	if err != nil {
 		fmt.Println(err)
+	} else {
+		fmt.Println(paymentId)
 	}
-
-	fmt.Println(paymentId)
 }

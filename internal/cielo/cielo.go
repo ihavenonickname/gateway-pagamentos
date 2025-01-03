@@ -87,7 +87,6 @@ func (cieloApi *CieloApi) ProcessCreditCardPayment(orderId string, amount int, i
 				"Holder":         card.Holder,
 				"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
 				"SecurityCode":   card.SecurityCode,
-				"Brand":          "Visa",
 			},
 		},
 	})
@@ -136,4 +135,166 @@ func (cieloApi *CieloApi) ProcessCreditCardPayment(orderId string, amount int, i
 	}
 
 	return string(paymentId), nil
+}
+
+func (cieloApi *CieloApi) ValidateCreditCard(card CreditCard) error {
+	payload, err := json.Marshal(map[string]interface{}{
+		"CardType":       "CreditCard",
+		"CardNumber":     card.CardNumber,
+		"Holder":         card.Holder,
+		"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
+		"SecurityCode":   card.SecurityCode,
+		"SaveCard":       false,
+	})
+
+	if err != nil {
+		return fmt.Errorf("failed to create request body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", cieloApi.commandBaseUrl+"/1/zeroauth", bytes.NewBuffer(payload))
+
+	if err != nil {
+		return fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("MerchantId", cieloApi.merchantID)
+	req.Header.Add("MerchantKey", cieloApi.merchantKey)
+
+	res, err := cieloApi.client.Do(req)
+
+	if err != nil {
+		return fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return fmt.Errorf("cielo api responded with status code %d", res.StatusCode)
+	}
+
+	body, err := io.ReadAll(res.Body)
+
+	var p fastjson.Parser
+
+	jsonDoc, err := p.ParseBytes(body)
+
+	if err != nil {
+		return fmt.Errorf("failed to parse response body: %w", err)
+	}
+
+	isValid := jsonDoc.GetBool("Valid")
+
+	if !isValid {
+		errorMessage := jsonDoc.GetStringBytes("ReturnMessage")
+
+		if errorMessage == nil {
+			return errors.New("unknown reason")
+		}
+
+		return fmt.Errorf("card is not valid: %s", errorMessage)
+	}
+
+	return nil
+}
+
+func (cieloApi *CieloApi) DetectCreditCardBrand(cardNumber string) (string, error) {
+	url := fmt.Sprintf("%s/1/cardBin/%.9s", cieloApi.queryBaseUrl, cardNumber)
+
+	req, err := http.NewRequest("GET", url, nil)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("MerchantId", cieloApi.merchantID)
+	req.Header.Add("MerchantKey", cieloApi.merchantKey)
+
+	res, err := cieloApi.client.Do(req)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != 200 {
+		return "", fmt.Errorf("cielo api responded with status code %d", res.StatusCode)
+	}
+
+	body, err := io.ReadAll(res.Body)
+
+	var p fastjson.Parser
+
+	jsonDoc, err := p.ParseBytes(body)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to parse response body: %w", err)
+	}
+
+	cardBrand := jsonDoc.GetStringBytes("Provider")
+
+	if len(cardBrand) == 0 {
+		return "", errors.New("could not find Provider field in response body")
+	}
+
+	return string(cardBrand), nil
+}
+
+func (cieloApi *CieloApi) TokenizeCreditCard(customerName string, card CreditCard) (string, error) {
+	payload, err := json.Marshal(map[string]interface{}{
+		"CustomerName":   customerName,
+		"CardNumber":     card.CardNumber,
+		"Holder":         card.Holder,
+		"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
+		"SecurityCode":   card.SecurityCode,
+	})
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create request body: %w", err)
+	}
+
+	req, err := http.NewRequest("POST", cieloApi.commandBaseUrl+"/1/card", bytes.NewBuffer(payload))
+
+	if err != nil {
+		return "", fmt.Errorf("failed to create request: %w", err)
+	}
+
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("MerchantId", cieloApi.merchantID)
+	req.Header.Add("MerchantKey", cieloApi.merchantKey)
+
+	res, err := cieloApi.client.Do(req)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to send request: %w", err)
+	}
+
+	defer res.Body.Close()
+
+	if res.StatusCode != 201 {
+		return "", fmt.Errorf("cielo api responded with status code %d", res.StatusCode)
+	}
+
+	body, err := io.ReadAll(res.Body)
+
+	var p fastjson.Parser
+
+	jsonDoc, err := p.ParseBytes(body)
+
+	if err != nil {
+		return "", fmt.Errorf("failed to parse response body: %w", err)
+	}
+
+	cardToken := jsonDoc.GetStringBytes("CardToken")
+
+	if len(cardToken) == 0 {
+		return "", errors.New("could not find CardToken field in response body")
+	}
+
+	return string(cardToken), nil
 }
