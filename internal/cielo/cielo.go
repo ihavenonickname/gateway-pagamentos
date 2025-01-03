@@ -21,7 +21,7 @@ type CieloApi struct {
 }
 
 type CreditCard struct {
-	CardNumber      string
+	Number          string
 	Holder          string
 	ExpirationMonth int
 	ExpirationYear  int
@@ -34,6 +34,9 @@ type CreditCardPayment struct {
 	Installments   int
 	SoftDescriptor string
 }
+
+var digitRegex = regexp.MustCompile(`^\d+$`)
+var digitAndLetterRegex = regexp.MustCompile(`^[a-zA-Z\d]+$`)
 
 type httpRetryTransport struct{}
 
@@ -86,7 +89,38 @@ func (cieloApi *CieloApi) ProcessCreditCardPayment(payment CreditCardPayment, ca
 		return "", err
 	}
 
-	// TODO Check CreditCardPayment
+	if payment.OrderId == "" {
+		return "", errors.New("field OrderId cannot be empty")
+	}
+
+	if len(payment.OrderId) > 50 {
+		return "", errors.New("field OrderId cannot exceed 50 characters")
+	}
+
+	if !digitAndLetterRegex.MatchString(payment.OrderId) {
+		return "", errors.New("field OrderId can contain letters and digits only")
+	}
+
+	if payment.Amount < 1 {
+		return "", errors.New("field Amount cannot be less than 1")
+	}
+
+	if payment.Installments < 1 {
+		return "", errors.New("field Installments cannot be less than 1")
+	}
+
+	if payment.SoftDescriptor == "" {
+		return "", errors.New("field SoftDescriptor cannot be empty")
+	}
+
+	if len(payment.SoftDescriptor) > 13 {
+		return "", errors.New("field SoftDescriptor cannot exceed 13 characters")
+	}
+
+	if !digitAndLetterRegex.MatchString(payment.SoftDescriptor) {
+		return "", errors.New("field SoftDescriptor can contain letters and digits only")
+	}
+
 	// TODO Accept a tokenized card
 	// TODO Accept recurrent payment
 	// https://docs.cielo.com.br/ecommerce-cielo/reference/criar-pagamento-credito
@@ -102,7 +136,7 @@ func (cieloApi *CieloApi) ProcessCreditCardPayment(payment CreditCardPayment, ca
 			"Capture":        true,
 			"SoftDescriptor": payment.SoftDescriptor,
 			"CreditCard": map[string]interface{}{
-				"CardNumber":     card.CardNumber,
+				"CardNumber":     card.Number,
 				"Holder":         card.Holder,
 				"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
 				"SecurityCode":   card.SecurityCode,
@@ -165,7 +199,7 @@ func (cieloApi *CieloApi) ValidateCreditCard(card CreditCard) error {
 
 	payload, err := json.Marshal(map[string]interface{}{
 		"CardType":       "CreditCard",
-		"CardNumber":     card.CardNumber,
+		"CardNumber":     card.Number,
 		"Holder":         card.Holder,
 		"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
 		"SecurityCode":   card.SecurityCode,
@@ -278,7 +312,7 @@ func (cieloApi *CieloApi) TokenizeCreditCard(customerName string, card CreditCar
 
 	payload, err := json.Marshal(map[string]interface{}{
 		"CustomerName":   customerName,
-		"CardNumber":     card.CardNumber,
+		"CardNumber":     card.Number,
 		"Holder":         card.Holder,
 		"ExpirationDate": fmt.Sprintf("%02d/%04d", card.ExpirationMonth, card.ExpirationYear),
 		"SecurityCode":   card.SecurityCode,
@@ -331,28 +365,44 @@ func (cieloApi *CieloApi) TokenizeCreditCard(customerName string, card CreditCar
 }
 
 func validateCreditCardFields(card CreditCard) error {
-	if len(card.CardNumber) > 16 {
-		return errors.New("card number cannot exceed 16 characters")
+	if len(card.Number) < 7 {
+		return errors.New("field Number cannot be less than 7 characters")
 	}
 
-	if matched, _ := regexp.MatchString(`^\d+$`, card.CardNumber); !matched {
-		return errors.New("card number must contain only digits")
+	if len(card.Number) > 19 {
+		return errors.New("field Number cannot exceed 19 characters")
+	}
+
+	if !digitRegex.MatchString(card.Number) {
+		return errors.New("field Number must contain only digits")
+	}
+
+	if card.Holder == "" {
+		return errors.New("field Holder name cannot be empty")
 	}
 
 	if len(card.Holder) > 25 {
-		return errors.New("holder name cannot exceed 25 characters")
+		return errors.New("field Holder name cannot exceed 25 characters")
 	}
 
 	if card.ExpirationMonth < 1 || card.ExpirationMonth > 12 {
-		return errors.New("expiration month must be between 1 and 12")
+		return errors.New("field ExpirationMonth must be between 1 and 12")
 	}
 
 	if card.ExpirationYear < time.Now().Year() {
-		return errors.New("expiration year must be the current year or later")
+		return errors.New("field ExpirationYear must be the current year or later")
 	}
 
-	if matched, _ := regexp.MatchString(`^\d+$`, card.SecurityCode); !matched {
-		return errors.New("security code must contain only digits")
+	if card.SecurityCode == "" {
+		return errors.New("field SecurityCode name cannot be empty")
+	}
+
+	if len(card.SecurityCode) > 4 {
+		return errors.New("field SecurityCode name cannot exceed 4 characters")
+	}
+
+	if !digitRegex.MatchString(card.SecurityCode) {
+		return errors.New("field SecurityCode must contain only digits")
 	}
 
 	return nil

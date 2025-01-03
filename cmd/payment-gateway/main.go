@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"payment-gateway/internal/cielo"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/spf13/viper"
@@ -38,11 +39,17 @@ func main() {
 		viper.GetString("cielo.baseQueryApiUrl"),
 	)
 
-	cardNumber := "5024007153463100"
+	card := cielo.CreditCard{
+		Number:          "5024007153463100",
+		Holder:          "Teste\"Holder",
+		ExpirationMonth: 2,
+		ExpirationYear:  2030,
+		SecurityCode:    "123",
+	}
 
 	fmt.Println("DetectCreditCardBrand")
 
-	cardBrand, err := cieloApi.DetectCreditCardBrand(cardNumber)
+	cardBrand, err := cieloApi.DetectCreditCardBrand(card.Number)
 
 	if err != nil {
 		fmt.Println(err)
@@ -51,14 +58,6 @@ func main() {
 	}
 
 	fmt.Println()
-
-	card := cielo.CreditCard{
-		CardNumber:      cardNumber,
-		Holder:          "Teste\"Holder",
-		ExpirationMonth: 2,
-		ExpirationYear:  2030,
-		SecurityCode:    "123",
-	}
 
 	fmt.Println("ValidateCreditCard")
 
@@ -87,7 +86,7 @@ func main() {
 	fmt.Println("ProcessCreditCardPayment")
 
 	payment := cielo.CreditCardPayment{
-		OrderId:        uuid.New().String(),
+		OrderId:        strings.ReplaceAll(uuid.New().String(), "-", ""),
 		Amount:         1569,
 		Installments:   1,
 		SoftDescriptor: "LOJATESTE",
