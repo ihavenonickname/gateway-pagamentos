@@ -1,6 +1,8 @@
 {
     "cielo": {
         "baseApiUrl": "https://apisandbox.cieloecommerce.cielo.com.br",
-        "baseQueryApiUrl": "https://apiquerysandbox.cieloecommerce.cielo.com.br"
+        "baseQueryApiUrl": "https://apiquerysandbox.cieloecommerce.cielo.com.br",
+        "merchantId": "",
+        "merchantKey": ""
     }
 }
